@@ -10,43 +10,49 @@ const INCORRECT = "incorrect"
 // int constants
 const TIMER_DURATION = 10000
 
+// initialize gameState object
 const gameState = initialGameState
 
+// ################################################################# //
+// main menu, entry point of program and base function
 async function showMainMenu() {
-    const action = await select({
-        message: "Main Menu",
-        choices: [
-            { name: "Start Game", value: "start" },
-            { name: "See Stats", value: "stats" },
-            { name: "Reset Stats", value: "reset" },
-            { name: "Quit", value: "quit" }
-        ]
-    })
+    while (true) {
+        const action = await select({
+            message: "Main Menu",
+            choices: [
+                { name: "Start Game", value: "start" },
+                { name: "See Stats", value: "stats" },
+                { name: "Reset Stats", value: "reset" },
+                { name: "Quit", value: "quit" }
+            ]
+        })
 
-    switch (action) {
-        case "start":
-            await startGame()
-            break
-        case "stats":
-            showStats()
-            await select({
-                message: 'Select "back" to return to main menu.',
-                choices: [{ name: "Back", value: "back" }]
-            })
-            await showMainMenu()
-            break
-        case "reset":
-            resetStats()
-            console.log(chalk.blue("\nStats have been reset.\n"))
-            await showMainMenu()
-            break
-        case "quit":
-            console.log(chalk.cyanBright("Goodbye!"))
-            process.exit(0)
+        switch (action) {
+            case "start":
+                await startGame()
+                break
+            case "stats":
+                showStats()
+                await select({
+                    message: 'Select "back" to return to main menu.',
+                    choices: [{ name: "Back", value: "back" }]
+                })
+                await showMainMenu()
+                break
+            case "reset":
+                resetStats()
+                console.log(chalk.blue("\nStats have been reset.\n"))
+                await showMainMenu()
+                break
+            case "quit":
+                console.log(chalk.cyanBright("Goodbye!"))
+                process.exit(0)
+        }
     }
 }
 
-// Initialize gameplay
+// ################################################################# //
+// Initialize gameplay each time "start game" is selected
 async function startGame() {
     // make sure there are still questions left
     // (checked redundantly so that the timer warning isn't shown if there are no questions)
@@ -59,23 +65,27 @@ async function startGame() {
         choices: [{ name: "Confirm", value: "confirm" }]
     })
 
+    // begin asking questions
     await askQuestion()
 }
 
+// ################################################################# //
 // Presents questions from current index
 async function askQuestion() {
     // make sure there are still questions left
     await isQuestionRemaining()
 
-    // make shorthand for 
+    // SETUP QUESTION AND CHOICE OPTIONS
+
+    // make shorthand for current question
     const currentQuestion = triviaDatabase[gameState.currentQuestionIndex]
     // shuffle choices into an array
     const choicesArray = shuffle([currentQuestion.correctAnswer, ...currentQuestion.wrongAnswers])
     // map choices to names, and values to correctness
     const choices = choicesArray.map((choice) => ({ name: choice, value: choice === currentQuestion.correctAnswer ? CORRECT : INCORRECT }))
 
-// ***************************************************************** //
-
+    // QUESTION AND TIMEOUT
+    // set question timeout
     const controller = new AbortController()
     const timeout = setTimeout(() => {
         controller.abort()
@@ -85,8 +95,10 @@ async function askQuestion() {
     const answer = await select({
         message: chalk.bold(currentQuestion.question),
         choices: choices
-    }, { signal: controller.signal})
+    }, { signal: controller.signal })
+        // call if question is answered before timeout
         .then((answer) => answeredBehavior(answer))
+        // call if question times out (or other error)
         .catch((err) => {
             if (err.name === "AbortPromptError") {
                 timeoutBehavior()
@@ -94,36 +106,31 @@ async function askQuestion() {
                 throw err
             }
         })
-        .finally(() => {
+        // clean timeout and prompt to continue or return to main menu
+        .finally(async () => {
             clearTimeout(timeout)
             // increment index, check for continue
             gameState.currentQuestionIndex++
-            checkContinue()
+
+            const isContinue = await select({
+                message: "Continue or return to main menu?",
+                choices: [
+                    { name: "Continue", value: "continue" },
+                    { name: "Main Menu", value: "menu" }
+                ]
+            })
+            // react to continue flag
+            switch (isContinue) {
+                case "continue":
+                    await askQuestion()
+                    break
+                case "menu":
+                    await showMainMenu()
+                    break
+            }
         })
 
-// ***************************************************************** //
-
-    // ask if user wants to continue with the quiz
-    // it's a function so it can be called by the timer expiration as well
-    async function checkContinue() {
-        const isContinue = await select({
-            message: "Continue or return to main menu?",
-            choices: [
-                { name: "Continue", value: "continue" },
-                { name: "Main Menu", value: "menu" }
-            ]
-        })
-
-        // react to continue flag
-        switch (isContinue) {
-            case "continue":
-                await askQuestion()
-                break
-            case "menu":
-                await showMainMenu()
-                break
-        }
-    }
+    // RESPONSE BEHAVIORS (broken out for clarity)
 
     function timeoutBehavior() {
         console.log(chalk.red.bold("\nTimer expired!"))
@@ -148,14 +155,16 @@ async function askQuestion() {
     }
 }
 
+// ################################################################# //
+// verify there are still questions left to be answered
 async function isQuestionRemaining() {
-    // verify there are still questions left to be answered
     if (gameState.currentQuestionIndex >= triviaDatabase.length) {
         console.log(chalk.red.bold("No questions left!", chalk.reset.red("Returning to main menu.")))
         await showMainMenu()
     }
 }
 
+// ################################################################# //
 // Display game stats, including remaining questions based on current index
 function showStats() {
     console.log(chalk.green(`Correct answers: ${gameState.stats.correctAnswers}`))
@@ -164,6 +173,7 @@ function showStats() {
     console.log(chalk.yellow(`Remaining questions: ${remainingQuestions}`))
 }
 
+// ################################################################# //
 // Reset all stats to 0
 function resetStats() {
     gameState.stats.correctAnswers = 0
@@ -171,5 +181,6 @@ function resetStats() {
     gameState.currentQuestionIndex = 0
 }
 
+// ################################################################# //
 // Start the game!
-showMainMenu(initialGameState)
+showMainMenu()
