@@ -92,7 +92,7 @@ async function askQuestion() {
     }, TIMER_DURATION)
 
     // present question
-    const answer = await select({
+    await select({
         message: chalk.bold(currentQuestion.question),
         choices: choices
     }, { signal: controller.signal })
