@@ -50,7 +50,7 @@ async function showMainMenu() {
 async function startGame() {
     // make sure there are still questions left
     // (checked redundantly so that the timer warning isn't shown if there are no questions)
-    await isQuestionRemaining() 
+    await isQuestionRemaining()
 
     // display timer warning
     console.log(chalk.red("You only have 10 seconds to answer each question!"))
@@ -59,54 +59,48 @@ async function startGame() {
         choices: [{ name: "Confirm", value: "confirm" }]
     })
 
-    await askQuestion(gameState.currentQuestionIndex)
+    await askQuestion()
 }
 
 // Presents questions from current index
-async function askQuestion(questionIndex) {
+async function askQuestion() {
     // make sure there are still questions left
     await isQuestionRemaining()
 
-    const questionTimer = setTimeout(() => {
-        console.log(chalk.red.bold("\nTimer expired!"))
-        console.log(chalk.yellow(`The correct answer was: ${currentQuestion.correctAnswer}`))
-        // increment stat and question index
-        gameState.stats.incorrectAnswers++
-        gameState.currentQuestionIndex++
-        // check for continue as usual
-        checkContinue()
-    }, TIMER_DURATION)
-
-    const currentQuestion = triviaDatabase[questionIndex]
+    const currentQuestion = triviaDatabase[gameState.currentQuestionIndex]
     // shuffle choices into an array
     const choicesArray = shuffle([currentQuestion.correctAnswer, ...currentQuestion.wrongAnswers])
     // map choices to names, and values to correctness
-    const choices = choicesArray.map((choice) => ({ name: choice, value: choice === currentQuestion.correctAnswer ? CORRECT : INCORRECT}))
+    const choices = choicesArray.map((choice) => ({ name: choice, value: choice === currentQuestion.correctAnswer ? CORRECT : INCORRECT }))
+
+// ***************************************************************** //
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => {
+        controller.abort()
+    }, TIMER_DURATION)
 
     // present question
     const answer = await select({
         message: chalk.bold(currentQuestion.question),
         choices: choices
-    })
+    }, { signal: controller.signal})
+        .then((answer) => answeredBehavior(answer))
+        .catch((err) => {
+            if (err.name === "AbortPromptError") {
+                timeoutBehavior()
+            } else {
+                throw err
+            }
+        })
+        .finally(() => {
+            clearTimeout(timeout)
+            // increment index, check for continue
+            gameState.currentQuestionIndex++
+            checkContinue()
+        })
 
-    // respond to answer, log stats
-    switch (answer) {
-        case CORRECT:
-            console.log(chalk.green("That's right!"))
-            gameState.stats.correctAnswers++
-            break
-        case INCORRECT:
-            console.log(chalk.red("Incorrect!"))
-            console.log(chalk.yellow(`The correct answer was: ${currentQuestion.correctAnswer}`))
-            gameState.stats.incorrectAnswers++
-            break
-    }
-
-    // cancel timer
-    clearTimeout(questionTimer)
-    // increment index, check for continue
-    gameState.currentQuestionIndex++
-    checkContinue()
+// ***************************************************************** //
 
     // ask if user wants to continue with the quiz
     // it's a function so it can be called by the timer expiration as well
@@ -122,10 +116,32 @@ async function askQuestion(questionIndex) {
         // react to continue flag
         switch (isContinue) {
             case "continue":
-                await askQuestion(gameState.currentQuestionIndex)
+                await askQuestion()
                 break
             case "menu":
                 await showMainMenu()
+                break
+        }
+    }
+
+    function timeoutBehavior() {
+        console.log(chalk.red.bold("\nTimer expired!"))
+        console.log(chalk.yellow(`The correct answer was: ${currentQuestion.correctAnswer}`))
+        // increment stat and question index
+        gameState.stats.incorrectAnswers++
+    }
+
+    function answeredBehavior(answer) {
+        // respond to answer, log stats
+        switch (answer) {
+            case CORRECT:
+                console.log(chalk.green("That's right!"))
+                gameState.stats.correctAnswers++
+                break
+            case INCORRECT:
+                console.log(chalk.red("Incorrect!"))
+                console.log(chalk.yellow(`The correct answer was: ${currentQuestion.correctAnswer}`))
+                gameState.stats.incorrectAnswers++
                 break
         }
     }
