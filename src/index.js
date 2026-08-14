@@ -8,7 +8,7 @@ import { select } from "@inquirer/prompts"
 const CORRECT = "correct"
 const INCORRECT = "incorrect"
 // int constants
-const TIMER_DURATION = 2000
+const TIMER_DURATION = 10000
 
 const gameState = initialGameState
 
@@ -67,6 +67,7 @@ async function askQuestion() {
     // make sure there are still questions left
     await isQuestionRemaining()
 
+    // make shorthand for 
     const currentQuestion = triviaDatabase[gameState.currentQuestionIndex]
     // shuffle choices into an array
     const choicesArray = shuffle([currentQuestion.correctAnswer, ...currentQuestion.wrongAnswers])
